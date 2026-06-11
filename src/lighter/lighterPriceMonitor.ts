@@ -53,7 +53,15 @@ export class LighterPriceMonitor {
       if (this.ws) { try { this.ws.close(); } catch (_) {} this.ws = null; }
       this.ws = new WebSocket(LIGHTER_WS_URL);
 
+      const connectTimeout = setTimeout(() => {
+        if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+          logger.warn('Lighter WS connect timeout (30s), terminating...');
+          try { this.ws.terminate(); } catch (_) {}
+        }
+      }, 30_000);
+
       this.ws.on('open', () => {
+        clearTimeout(connectTimeout);
         logger.info('Lighter WebSocket open, subscribing...');
         this.reconnectCount = 0;
 

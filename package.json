@@ -8,7 +8,8 @@
     "start": "node dist/indexDeltaNeutral.js",
     "dev": "ts-node src/indexDeltaNeutral.ts",
     "scalp": "ts-node src/index.ts",
-    "watch": "ts-node-dev --respawn src/indexDeltaNeutral.ts"
+    "watch": "ts-node-dev --respawn src/indexDeltaNeutral.ts",
+    "postinstall": "node scripts/patch-sdk.js"
   },
   "dependencies": {
     "@noble/secp256k1": "^2.1.0",

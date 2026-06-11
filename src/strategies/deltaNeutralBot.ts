@@ -95,6 +95,30 @@ export class DeltaNeutralBot extends TradingBot {
     // Синхронизируем состояние с биржей при старте
     await this.posManager.syncWithExchange(this.config.marketId);
 
+    // Восстанавливаем Lighter ногу с биржи
+    try {
+      const lpos = await this.lighterClient.getPosition(this.dnConfig.lighterMarketIndex);
+      if (lpos.side !== 'none' && lpos.size > 0) {
+        this.lighterLeg = {
+          open: true,
+          side: lpos.side,
+          sizeEth: lpos.size,
+          entryPrice: lpos.entryPrice,
+          openedAt: new Date(),
+          clientOrderIndex: null,
+        };
+        this.currentSizeEth = lpos.size;
+        this.pairDirection = lpos.side === 'short' ? 'rise-long' : 'rise-short';
+        if (!this.pairOpenedAt) this.pairOpenedAt = new Date();
+        if (!this.currentHoldMinutes) this.currentHoldMinutes = 15;
+        logger.info(`syncLighter: восстановлена ${lpos.side.toUpperCase()} ${lpos.size} ETH @ ${lpos.entryPrice}`);
+      } else {
+        logger.info('syncLighter: нет открытой позиции на Lighter');
+      }
+    } catch (err) {
+      logger.warn(`syncLighter failed: ${err}`);
+    }
+
     return super.start();
   }
 
@@ -403,7 +427,7 @@ export class DeltaNeutralBot extends TradingBot {
         if (this.pairOpenedAt) {
           const min = ((Date.now() - this.pairOpenedAt.getTime()) / 60_000).toFixed(1);
           durationStr = ` | активна ${min} мин`;
-          const fundingPerPoll = Math.abs(spread) * this.dnConfig.lighterSizeEth * this.lighterPrice;
+          const fundingPerPoll = Math.abs(spread) * this.lighterLeg.sizeEth * this.lighterPrice;
           this.totalFundingEarned += fundingPerPoll;
         }
         logger.info(
