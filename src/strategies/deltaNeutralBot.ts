@@ -92,6 +92,9 @@ export class DeltaNeutralBot extends TradingBot {
     await this.lighterMonitor.start();
     this.startFundingPoll();
 
+    // Синхронизируем состояние с биржей при старте
+    await this.posManager.syncWithExchange(this.config.marketId);
+
     return super.start();
   }
 
@@ -128,6 +131,11 @@ export class DeltaNeutralBot extends TradingBot {
   // Rise SHORT + Lighter LONG — когда Lighter funding > Rise funding
   protected shouldOpenShort(price: number): boolean {
     if (this.lighterPrice === 0) return false;
+    if (Date.now() < this.cooldownUntil) {
+      const remaining = ((this.cooldownUntil - Date.now()) / 1000).toFixed(0);
+      logger.debug(`⏸ Cooldown активен, осталось ${remaining}s`);
+      return false;
+    }
     const spread = this.getFundingSpread();
     if (spread < -this.dnConfig.fundingSpreadThreshold) {
       logger.info(`📡 СИГНАЛ SHORT | Lighter funding выше | спред=${(spread * 100).toFixed(6)}% | ETH=${price}`);
@@ -142,8 +150,8 @@ export class DeltaNeutralBot extends TradingBot {
 
   private randomizeTradeParams(currentPrice: number): void {
     // Случайный размер от $100 до $600
-    const minUsd = 489;
-    const maxUsd = 1243;
+    const minUsd = parseFloat(process.env.MIN_USD ?? "489");
+    const maxUsd = parseFloat(process.env.MAX_USD ?? "1243");
     const randomUsd = minUsd + Math.random() * (maxUsd - minUsd);
     this.currentSizeEth = parseFloat((randomUsd / currentPrice).toFixed(4));
     // Rise: 1 step = 0.001 единиц токена (универсально для любого токена)
@@ -275,7 +283,7 @@ export class DeltaNeutralBot extends TradingBot {
       return true;
     }
 
-    await this.checkAndRebalanceDelta();
+    // await this.checkAndRebalanceDelta(); // отключено
     return false;
   }
 

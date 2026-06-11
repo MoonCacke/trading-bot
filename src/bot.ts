@@ -33,8 +33,8 @@ export class TradingBot {
     this.running = true;
     this.scheduleMonitor();
 
-    process.on('SIGINT', () => this.shutdown('SIGINT'));
-    process.on('SIGTERM', () => this.shutdown('SIGTERM'));
+    process.on('SIGINT', () => { this.shutdown('SIGINT').catch(console.error); });
+    process.on('SIGTERM', () => { this.shutdown('SIGTERM').catch(console.error); });
 
     logger.info('Bot is running. Press Ctrl+C to stop.');
   }
@@ -101,11 +101,29 @@ export class TradingBot {
     }
 
     if (this.shouldOpenLong(price)) {
-      await this.positionManager.openLong(this.config.marketId, this.config.positionSizeSteps);
-      this.onPositionOpened();
+      this.isClosing = true; // блокируем новые попытки
+      try {
+        await this.positionManager.openLong(this.config.marketId, this.config.positionSizeSteps);
+        this.onPositionOpened();
+      } catch (err) {
+        logger.error(`Failed to open LONG: ${err}`);
+        logger.warn('Cooling down 60s after failed open...');
+        await new Promise(r => setTimeout(r, 60000));
+      } finally {
+        this.isClosing = false;
+      }
     } else if (this.shouldOpenShort(price)) {
-      await this.positionManager.openShort(this.config.marketId, this.config.positionSizeSteps);
-      this.onPositionOpened();
+      this.isClosing = true; // блокируем новые попытки
+      try {
+        await this.positionManager.openShort(this.config.marketId, this.config.positionSizeSteps);
+        this.onPositionOpened();
+      } catch (err) {
+        logger.error(`Failed to open SHORT: ${err}`);
+        logger.warn('Cooling down 60s after failed open...');
+        await new Promise(r => setTimeout(r, 60000));
+      } finally {
+        this.isClosing = false;
+      }
     } else {
       logger.debug(`No signal | price=${price}`);
     }
@@ -126,6 +144,7 @@ export class TradingBot {
   private async shutdown(signal: string): Promise<void> {
     logger.info(`Received ${signal}, shutting down...`);
     await this.stop();
+    await new Promise(r => setTimeout(r, 2000));
     process.exit(0);
   }
 }

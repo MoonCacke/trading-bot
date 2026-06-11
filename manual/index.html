@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ручное управление позицией</title>
+<style>
+  body { background: #0d0f1a; color: #fff; font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
+  .container { max-width: 700px; margin: 0 auto; }
+  h1 { color: #00ff88; font-size: 22px; }
+  .card { background: #1a1d2e; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  label { color: #aaa; font-size: 13px; display: block; margin-bottom: 6px; }
+  input { background: #0d0f1a; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 8px; font-size: 16px; width: 150px; }
+  button { border: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-right: 10px; margin-top: 15px; }
+  .btn-open { background: #00ff88; color: #000; }
+  .btn-close { background: #ff4444; color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status { padding: 12px; border-radius: 8px; margin-top: 15px; font-size: 14px; background: #0d0f1a; }
+  .pos-info { color: #00ff88; }
+  .no-pos { color: #888; }
+  #message { margin-top: 12px; font-size: 14px; min-height: 20px; }
+  a { color: #4a9eff; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🖐 Ручное управление позицией</h1>
+
+  <div class="card">
+    <label>Размер позиции ($)</label>
+    <input type="number" id="sizeUsd" value="300" min="50" step="50">
+    <br>
+    <button class="btn-open" id="btnOpen" onclick="openPos()">▶ Открыть позицию</button>
+    <button class="btn-close" id="btnClose" onclick="closePos()">⏹ Закрыть позицию</button>
+    <div id="message"></div>
+    <div class="status" id="status">Загрузка статуса...</div>
+  </div>
+
+  <div class="card">
+    <a href="/dashboard">← Вернуться на главный дашборд</a>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+
+async function refreshStatus() {
+  try {
+    const res = await fetch(API + '/position/status');
+    const data = await res.json();
+    const el = document.getElementById('status');
+    if (data.state && data.state.open) {
+      const s = data.state;
+      const openedAt = new Date(s.openedAt).toLocaleString('ru-RU');
+      el.innerHTML = '<span class="pos-info">🟢 ПОЗИЦИЯ ОТКРЫТА</span><br>' +
+        'Направление: ' + (s.direction === 'rise-long' ? 'Rise LONG + Lighter SHORT' : 'Rise SHORT + Lighter LONG') + '<br>' +
+        'Размер: ' + s.sizeEth + ' ETH<br>' +
+        'Rise вход: $' + s.riseEntryPrice.toFixed(2) + '<br>' +
+        'Lighter вход: $' + s.lighterEntryPrice.toFixed(2) + '<br>' +
+        'Открыта: ' + openedAt;
+    } else {
+      el.innerHTML = '<span class="no-pos">⚪ Нет открытой ручной позиции</span>';
+    }
+  } catch (e) {
+    document.getElementById('status').textContent = 'Ошибка загрузки статуса';
+  }
+}
+
+function setBusy(busy) {
+  document.getElementById('btnOpen').disabled = busy;
+  document.getElementById('btnClose').disabled = busy;
+}
+
+async function openPos() {
+  const sizeUsd = document.getElementById('sizeUsd').value;
+  if (!confirm('Открыть дельта-нейтральную позицию на $' + sizeUsd + '?')) return;
+  setBusy(true);
+  document.getElementById('message').textContent = '⏳ Открываем позицию...';
+  try {
+    const res = await fetch(API + '/position/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sizeUsd: Number(sizeUsd) }),
+    });
+    const data = await res.json();
+    document.getElementById('message').textContent = (data.ok ? '✅ ' : '❌ ') + data.message;
+  } catch (e) {
+    document.getElementById('message').textContent = '❌ Ошибка: ' + e;
+  }
+  setBusy(false);
+  refreshStatus();
+}
+
+async function closePos() {
+  if (!confirm('Закрыть позицию (обе ноги)?')) return;
+  setBusy(true);
+  document.getElementById('message').textContent = '⏳ Закрываем позицию...';
+  try {
+    const res = await fetch(API + '/position/close', { method: 'POST' });
+    const data = await res.json();
+    document.getElementById('message').textContent = (data.ok ? '✅ ' : '❌ ') + data.message;
+  } catch (e) {
+    document.getElementById('message').textContent = '❌ Ошибка: ' + e;
+  }
+  setBusy(false);
+  refreshStatus();
+}
+
+refreshStatus();
+setInterval(refreshStatus, 5000);
+</script>
+</body>
+</html>

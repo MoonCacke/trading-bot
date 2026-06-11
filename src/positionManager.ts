@@ -75,8 +75,8 @@ export class PositionManager {
       logger.warn('closePosition called but no active position');
       return;
     }
-    const { marketId } = this.activePosition;
-    logger.info(`Closing position | reason=${reason}`);
+    const { marketId, side, size } = this.activePosition;
+    logger.info(`Closing position | reason=${reason} | side=${side} size=${size}`);
     try {
       await this.client.closePosition(marketId);
       const closePrice = await this.getCurrentPrice(marketId);
@@ -122,6 +122,34 @@ export class PositionManager {
       }
     }
     return null;
+  }
+
+  async syncWithExchange(marketId: number): Promise<void> {
+    try {
+      const pos = await this.info.getPosition(marketId, this.config.accountAddress);
+      if (!pos || pos.size === '0') {
+        this.activePosition = null;
+        logger.info('syncWithExchange: no open position on Rise');
+        return;
+      }
+      const size = Math.abs(parseFloat(pos.size));
+      const side: 'long' | 'short' = pos.side === 0 ? 'long' : 'short';
+      const entryPrice = parseFloat(pos.entry_price);
+      if (size > 0) {
+        this.activePosition = {
+          marketId,
+          side,
+          size: Math.round(size / 0.001),
+          entryPrice,
+          stopLossPrice: side === 'long' ? entryPrice * (1 - this.config.stopLossPct / 100) : entryPrice * (1 + this.config.stopLossPct / 100),
+          takeProfitPrice: side === 'long' ? entryPrice * (1 + this.config.takeProfitPct / 100) : entryPrice * (1 - this.config.takeProfitPct / 100),
+          openedAt: new Date(),
+        };
+        logger.info(`syncWithExchange: restored ${side.toUpperCase()} position | size=${size} ETH | entry=${entryPrice}`);
+      }
+    } catch (err) {
+      logger.warn(`syncWithExchange failed: ${err}`);
+    }
   }
 
   getActivePosition(): PositionState | null { return this.activePosition; }
